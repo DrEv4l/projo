@@ -1,0 +1,3 @@
+[submodule "bluecollar_frontend"]
+	path = bluecollar_frontend
+	url = ./bluecollar_frontend
