@@ -1,13 +1,33 @@
+/* File: src/index.css */
+/* Keep the Bootstrap import if it's here, or have it in index.js */
+/* @import '~bootstrap/dist/css/bootstrap.min.css'; */
+
+/* --- Custom Global Styles --- */
+
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8f9fa !important; /* A very light grey, Bootstrap's 'bg-light' */
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* Custom color variables for Bootstrap override and custom use */
+:root {
+  --bs-primary: #0d6efd;      /* Bootstrap's default blue */
+  --bs-secondary: #6c757d;    /* Bootstrap's default gray */
+  --custom-accent: #dc3545;  /* A strong red/accent color, Bootstrap's 'danger' */
+  --custom-success: #198754; /* Bootstrap's 'success' green */
+}
+
+/* Make links a bit bolder */
+a {
+  font-weight: 500;
+}
+
+/* Style for our custom cards to give them a slight hover effect */
+.custom-card-hover {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.custom-card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
 }

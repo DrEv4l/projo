@@ -1,23 +1,28 @@
+// File: src/index.js
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import ReactDOM from 'react-dom/client'; // CORRECT: Import 'createRoot' API from 'react-dom/client'
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
+import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+// 1. Get the root DOM element
+const rootElement = document.getElementById('root');
+
+// 2. Create a root.
+const root = ReactDOM.createRoot(rootElement);
+
+// 3. Render the application using the root's render method.
 root.render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider> {/* Wrap App with AuthProvider */}
+      <AuthProvider>
         <App />
       </AuthProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  // </React.StrictMode>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();

@@ -1,36 +1,41 @@
-// src/App.js
+// File: src/App.js
 import React from 'react';
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
+// --- React-Bootstrap Imports ---
+import Container from 'react-bootstrap/Container';
+import Nav from 'react-bootstrap/Nav';
+import Navbar from 'react-bootstrap/Navbar';
+import Button from 'react-bootstrap/Button';
+import NavDropdown from 'react-bootstrap/NavDropdown'; // IMPORT NavDropdown
+
+// --- Your Component Imports ---
 import LandingPage from './components/LandingPage';
 import SignUpForm from './components/SignUpForm';
 import LoginForm from './components/LoginForm';
 import Dashboard from './components/Dashboard';
 import ProviderProfile from './components/ProviderProfile';
-import ProtectedRoute from './components/ProtectedRoute'; // Your v6 ProtectedRoute using <Outlet />
+import ProviderProfileEdit from './components/ProviderProfileEdit';
+import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import BookingForm from './components/BookingForm';
 import MyBookings from './components/MyBookings';
+import BookingDetails from './components/BookingDetails';
 import ChatWindow from './components/ChatWindow';
-import './App.css';
+import UserProfileEdit from './components/UserProfileEdit';
 
 // Placeholder for a "Not Found" component
 const NotFound = () => (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
+    <div className="text-center mt-5">
         <h2>404 - Page Not Found</h2>
         <Link to="/">Go Home</Link>
     </div>
 );
 
-// Wrapper component for the chat route to extract params and pass to ChatWindow
-// Also, ensure currentUserId is passed if ChatWindow needs it
+// Wrapper component for the chat route
 const ChatPage = () => {
     const { roomNameParam } = useParams();
-    const { user } = useAuth(); // Get current user to potentially pass their ID
-
-    // It's good practice to ensure user context is loaded if ChatWindow depends on it
-    // For simplicity, assuming user object is available or ChatWindow handles null user.id
-    const currentUserId = user ? (user.id || user.user_id) : null; // Adjust 'user.id' based on your user object structure
-
+    const { user } = useAuth();
+    const currentUserId = user ? (user.user_id || user.id) : null;
     return <ChatWindow roomName={roomNameParam} currentUserId={currentUserId} />;
 };
 
@@ -44,51 +49,78 @@ function App() {
   };
 
   return (
-    <div className="App">
-      {/* Consider replacing this default header with your own application header/navbar component */}
+    <div className="bg-light min-vh-100">
+      <Navbar bg="white" expand="lg" className="shadow-sm">
+        <Container>
+          <Navbar.Brand as={Link} to="/" className="fw-bold text-primary">
+            BlueCollarPro
+          </Navbar.Brand>
+          <Navbar.Toggle aria-controls="basic-navbar-nav" />
+          <Navbar.Collapse id="basic-navbar-nav">
+            <Nav className="ms-auto align-items-center">
+              {accessToken ? (
+                <>
+                  <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link>
+                  <Nav.Link as={Link} to="/my-bookings">My Bookings</Nav.Link>
+                  
+                  {/* === UPDATED PROFILE LINK TO BE A DROPDOWN === */}
+                  <NavDropdown title={<span>Welcome, {user?.username}!</span>} id="profile-nav-dropdown" className="ms-3">
+                    {/* Link for ALL users to edit basic info */}
+                    <NavDropdown.Item as={Link} to="/profile/user/edit">
+                      Edit My Info
+                    </NavDropdown.Item>
+                    
+                    {/* Conditional link ONLY for providers */}
+                    {user?.is_provider && (
+                      <NavDropdown.Item as={Link} to="/profile/provider/edit">
+                        Edit Provider Profile
+                      </NavDropdown.Item>
+                    )}
 
-      <nav style={{ padding: '10px', background: '#f0f0f0', marginBottom: '20px', textAlign: 'center' }}>
-        <Link to="/" style={{ marginRight: '15px' }}>Home</Link>
-        {accessToken ? (
-          <>
-            <Link to="/dashboard" style={{ marginRight: '15px' }}>Dashboard</Link>
-            <Link to="/my-bookings" style={{ marginRight: '15px' }}>My Bookings</Link>
-            {/* Example: A general chat link, if you have one. Could be dynamic based on context. */}
-            {/* <Link to="/chat/general" style={{ marginRight: '15px' }}>General Chat</Link> */}
-            {user && <span style={{ marginRight: '15px' }}>Welcome, {user.username}!</span>}
-            <button onClick={handleLogout}>Logout</button>
-          </>
-        ) : (
-          <>
-            <Link to="/signup" style={{ marginRight: '15px' }}>Sign Up</Link>
-            <Link to="/login" style={{ marginRight: '15px' }}>Login</Link>
-          </>
-        )}
-      </nav>
-      <hr />
+                    <NavDropdown.Divider />
+                    <NavDropdown.Item onClick={handleLogout} className="text-danger">
+                      Logout
+                    </NavDropdown.Item>
+                  </NavDropdown>
+                </>
+              ) : (
+                <>
+                  <Nav.Link as={Link} to="/login">Login</Nav.Link>
+                  <Button as={Link} to="/signup" variant="primary" size="sm">
+                    Sign Up
+                  </Button>
+                </>
+              )}
+            </Nav>
+          </Navbar.Collapse>
+        </Container>
+      </Navbar>
 
-      <div className="content" style={{ padding: '20px' }}>
+      <Container as="main" className="py-4">
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/signup" element={<SignUpForm />} />
           <Route path="/login" element={<LoginForm />} />
 
-          {/* Protected Routes: All routes nested under ProtectedRoute will require authentication */}
-          <Route element={<ProtectedRoute />}> {/* This is the layout route for protected content */}
+          {/* Protected Routes Wrapper */}
+          <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/providers/:providerUserId" element={<ProviderProfile />} />
-            <Route path="/book-service" element={<BookingForm />} /> {/* This might need provider info passed via state/params from where it's navigated */}
+            <Route path="/book-service" element={<BookingForm />} />
             <Route path="/my-bookings" element={<MyBookings />} />
+            <Route path="/bookings/:bookingId" element={<BookingDetails />} />
             <Route path="/chat/:roomNameParam" element={<ChatPage />} />
-            {/* Add other protected routes here, e.g., a BookingDetailsPage */}
-            {/* <Route path="/bookings/:bookingId" element={<BookingDetailsPage />} /> */}
+            
+            {/* === CORRECTED AND CLARIFIED ROUTES FOR EDITING PROFILES === */}
+            <Route path="/profile/user/edit" element={<UserProfileEdit />} />
+            <Route path="/profile/provider/edit" element={<ProviderProfileEdit />} />
           </Route>
 
-          {/* Catch-all Not Found Route - should be the last route */}
+          {/* Catch-all Not Found Route */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </div>
+      </Container>
     </div>
   );
 }

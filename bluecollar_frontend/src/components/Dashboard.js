@@ -1,21 +1,27 @@
-// src/components/Dashboard.js (or rename to DashboardPage.js and move to a 'pages' folder if you refactor later)
+// File: src/components/Dashboard.js
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import CustomerDashboard from './CustomerDashboard'; // You'll create this
-import ProviderDashboard from './ProviderDashboard'; // You'll create this
+import CustomerDashboard from './CustomerDashboard';
+import ProviderDashboard from './ProviderDashboard';
 import { Navigate } from 'react-router-dom';
 
 const Dashboard = () => {
-  const { user, accessToken } = useAuth();
+  // Get user info, auth token, and the auth loading status from the context
+  const { user, accessToken, loadingAuth } = useAuth();
 
-  // This check should ideally be handled by ProtectedRoute, but good for belt-and-suspenders
-  if (!accessToken || !user) {
-    // User not loaded yet or not authenticated
-    // ProtectedRoute should handle redirection, but you can also do it here
-    // Or show a loading indicator if user is null but token exists (meaning user state is still loading)
-    return <Navigate to="/login" />;
+  // 1. If the context is still performing its initial check for a token,
+  //    show a loading state to prevent flashing the wrong content.
+  if (loadingAuth) {
+    return <p>Loading dashboard...</p>;
   }
 
+  // 2. If auth is loaded and there's no token/user, redirect to login.
+  //    (This is a backup for your ProtectedRoute).
+  if (!accessToken || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 3. If the user is loaded, check their role and render the correct dashboard.
   if (user.is_provider) {
     return <ProviderDashboard />;
   } else {

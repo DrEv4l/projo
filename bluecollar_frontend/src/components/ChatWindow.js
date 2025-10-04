@@ -1,136 +1,144 @@
-// src/components/ChatWindow.js
-import React, { useState, useEffect, useRef, } from 'react';
+// File: src/components/ChatWindow.js
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Form, Button, Card, Alert } from 'react-bootstrap';
 
-const ChatWindow = ({ roomName, currentUserId /* Pass currentUserId from App.js/ChatPage */ }) => {
+const ChatWindow = ({ roomName, currentUserId }) => {
+  const { accessToken, loadingAuth } = useAuth();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  // const [socket, setSocket] = useState(null); // We might not need socket in state if we manage via ref for this pattern
-  const socketRef = useRef(null); // Use a ref to hold the socket instance
-  const [isConnected, setIsConnected] = useState(false); // For UI feedback
+  const [isConnected, setIsConnected] = useState(false);
   const [socketError, setSocketError] = useState(null);
-  const { accessToken, user } = useAuth();
+  
+  const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(scrollToBottom, [messages]);
-
-  // The connectWebSocket function is now just a setup, doesn't need to be in useCallback as much
-  // if its dependencies are stable or managed by the outer useEffect.
   useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    if (loadingAuth) {
+      console.log("EFFECT: Auth is loading. Aborting connection attempt.");
+      return;
+    }
     if (!roomName || !accessToken) {
-      console.log("Room name or access token missing, not connecting WebSocket.");
-      setIsConnected(false);
+      console.log("EFFECT: Room name or token missing. Aborting connection attempt.");
+      return;
+    }
+    if (socketRef.current) {
+      console.log(`EFFECT: A socket instance already exists (state=${socketRef.current.readyState}). Aborting new connection.`);
       return;
     }
 
-    // const wsUrl = `ws://127.0.0.1:8000/ws/chat/${roomName}/`;
-    // FOR TESTING AUTHENTICATION (as per our previous discussion on WebSocket auth):
     const wsUrl = `ws://127.0.0.1:8000/ws/chat/${roomName}/?token=${accessToken}`;
-    console.log(`Attempting to connect to WebSocket: ${wsUrl}`);
+    console.log(`EFFECT: Creating NEW WebSocket connection to: ${wsUrl}`);
+    
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
 
-    const newSocket = new WebSocket(wsUrl);
-    socketRef.current = newSocket; // Store in ref
+    setIsConnected(false);
+    setSocketError(null);
+    setMessages([]);
 
-    newSocket.onopen = () => {
-      console.log('WebSocket Connected to room:', roomName);
+    socket.onopen = () => {
+      console.log('✅ WebSocket Connected to room:', roomName);
       setIsConnected(true);
-      setSocketError(null);
     };
 
-    newSocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('Message from server:', data);
-      setMessages((prevMessages) => [...prevMessages, data]);
-    };
-
-    newSocket.onclose = (event) => {
-      console.warn('WebSocket Disconnected:', event.reason, event.code);
-      setIsConnected(false);
-      if (socketRef.current && event.target === socketRef.current) { // Ensure it's our current socket closing
-        socketRef.current = null; // Clear the ref if this socket instance closed
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('✉️ Message from server:', data);
+        if (data.type === 'message_history') {
+          setMessages(data.messages || []);
+        } else if (data.type === 'chat_message') {
+          setMessages((prev) => [...prev, data]);
+        } else if (data.type === 'error') {
+          setSocketError(data.message);
+        }
+      } catch (e) { 
+        console.error("❗️ Failed to parse server message:", e);
       }
-      // Optional: Reconnection logic
     };
 
-    newSocket.onerror = (error) => {
-      console.error('WebSocket Error:', error);
+    socket.onclose = (event) => {
+      console.warn('🔌 WebSocket Disconnected. Code:', event.code, 'Reason:', event.reason);
       setIsConnected(false);
-      setSocketError('WebSocket connection error.');
+      if (!event.wasClean) {
+        setSocketError('Connection failed or was closed unexpectedly.');
+      }
+      socketRef.current = null;
     };
 
-    // Cleanup function
+    socket.onerror = (error) => {
+      console.error('❌ WebSocket Error:', error);
+      setSocketError('A WebSocket error occurred. Please check server logs.');
+    };
+
     return () => {
-      if (newSocket && newSocket.readyState === WebSocket.OPEN) {
-        console.log('Closing WebSocket from useEffect cleanup (due to unmount or dependency change).');
-        newSocket.close();
+      console.log(`🧹 Component Unmounting. Cleaning up WebSocket for room: ${roomName}.`);
+      if (socketRef.current) {
+        socketRef.current.close(1000, "Component unmounting");
+        socketRef.current = null;
       }
-      socketRef.current = null; // Clear ref on cleanup too
     };
-  }, [roomName, accessToken]); // Dependencies that trigger a new connection
+  }, [roomName, accessToken, loadingAuth]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (newMessage.trim() && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ message: newMessage }));
-      setNewMessage('');
+        const payload = { message: newMessage };
+        const roomParts = roomName.split('_');
+        if (roomName.startsWith('booking_') && roomParts.length === 2 && !isNaN(parseInt(roomParts[1]))) {
+            payload.booking_id = roomParts[1];
+        }
+        socketRef.current.send(JSON.stringify(payload));
+        setNewMessage('');
     } else {
-      console.error("Socket not open or message empty");
-      setSocketError('Cannot send message. Connection not open.');
+        setSocketError('Cannot send message. Connection is not active.');
     }
   };
 
-  // Ensure 'user.id' or 'user.user_id' matches what your backend sends as 'sender_id'
-  const actualCurrentUserId = currentUserId || (user ? (user.id || user.user_id) : null);
-
-
-  if (!user) return <p>Please log in to chat.</p>; // Or use !accessToken for a stricter check
-  if (!roomName) return <p>Chat room not specified.</p>;
-
+  if (loadingAuth) return <p>Loading session...</p>;
+  if (!accessToken) return <p>Please log in to chat.</p>;
+  
   return (
-    <div style={{ border: '1px solid #ccc', padding: '10px', height: '500px', display: 'flex', flexDirection: 'column' }}>
-      <h3>Chat Room: {roomName.replace(/_/g, ' ')} ({isConnected ? 'Connected' : 'Disconnected'})</h3>
-      {socketError && <p style={{color: 'red'}}>{socketError}</p>}
-      <div style={{ flexGrow: 1, overflowY: 'auto', border: '1px solid #eee', padding: '10px', marginBottom: '10px' }}>
-        {messages.length === 0 && !socketError && isConnected && <p>No messages yet. Say hello!</p>}
-        {messages.length === 0 && !socketError && !isConnected && <p>Attempting to connect...</p>}
-        {messages.map((msg, index) => (
-          // Ensure actualCurrentUserId is correctly derived
-          <div key={msg.id || index} style={{ textAlign: msg.sender_id === actualCurrentUserId ? 'right' : 'left', marginBottom: '5px' }}>
-            <div style={{
-              display: 'inline-block',
-              padding: '8px 12px',
-              borderRadius: '15px',
-              backgroundColor: msg.sender_id === actualCurrentUserId ? '#dcf8c6' : '#f0f0f0',
-              maxWidth: '70%',
-            }}>
-              <strong>{msg.sender_username || `User ${msg.sender_id}`}: </strong> {/* Display sender_id if username is missing */}
-              {msg.message}
-              <div style={{ fontSize: '0.7em', color: '#888', textAlign: 'right' }}>
-                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+    <Card className="shadow-sm" style={{ height: '600px' }}>
+      <Card.Header as="h5" className="text-center">
+        Chat: {roomName.replace(/_/g, ' ')} ({isConnected ? <span className="text-success">Connected</span> : <span className="text-danger">Disconnected</span>})
+      </Card.Header>
+      <Card.Body className="d-flex flex-column" style={{ overflowY: 'hidden' }}>
+        {socketError && <Alert variant="danger" className="text-center py-2">{socketError}</Alert>}
+        <div className="flex-grow-1 p-2" style={{ overflowY: 'auto' }}>
+          {messages.map((msg) => (
+            <div key={msg.id} className={`d-flex ${msg.is_self ? 'justify-content-end' : 'justify-content-start'} mb-2`}>
+              <div className={`p-2 rounded`} style={{ backgroundColor: msg.is_self ? '#dcf8c6' : '#f0f0f0', maxWidth: '75%' }}>
+                <strong className="d-block" style={{ fontSize: '0.9em' }}>{msg.sender_username}</strong>
+                {msg.message}
+                <div className="text-muted" style={{ fontSize: '0.7em', textAlign: 'right' }}>
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-      <form onSubmit={handleSendMessage} style={{ display: 'flex' }}>
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type a message..."
-          style={{ flexGrow: 1, padding: '10px', marginRight: '5px', borderRadius: '5px', border: '1px solid #ccc' }}
-          disabled={!isConnected || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN}
-        />
-        <button type="submit" style={{ padding: '10px 15px', borderRadius: '5px' }} disabled={!isConnected || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN}>
-          Send
-        </button>
-      </form>
-    </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+        <Form onSubmit={handleSendMessage} className="mt-2 d-flex">
+          <Form.Control 
+            type="text" 
+            value={newMessage} 
+            onChange={(e) => setNewMessage(e.target.value)} 
+            placeholder="Type a message..." 
+            disabled={!isConnected} 
+            className="me-2" 
+          />
+          <Button type="submit" disabled={!isConnected || !newMessage.trim()}>
+            Send
+          </Button>
+        </Form>
+      </Card.Body>
+    </Card>
   );
 };
 

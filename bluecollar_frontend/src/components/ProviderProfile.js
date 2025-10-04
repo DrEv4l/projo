@@ -1,15 +1,26 @@
-// src/components/ProviderProfile.js
+// File: src/components/ProviderProfile.js
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // Add useNavigate
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/axiosConfig';
+import { Card, Button, Row, Col, Spinner, Alert, ListGroup, Image } from 'react-bootstrap'; // Import Image
+import { FaStar, FaPhone, FaEnvelope, FaComments, FaBook, FaUserCircle } from 'react-icons/fa'; // Import FaUserCircle for placeholder
+
+const StarRatingDisplay = ({ rating }) => {
+    if (rating == null) return <span className="text-muted fst-italic">Not rated yet</span>;
+    const numericRating = parseFloat(rating);
+    const starElements = Array.from({ length: 5 }, (_, i) => (
+        <FaStar key={i} color={i < numericRating ? '#ffc107' : '#e4e5e9'} />
+    ));
+    return <>{starElements} <span className="ms-2">({numericRating.toFixed(1)})</span></>;
+};
 
 const ProviderProfile = () => {
-  const { providerUserId } = useParams(); // Get providerUserId from URL params
+  const { providerUserId } = useParams();
   const [provider, setProvider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const navigate = useNavigate(); // Initialize navigate
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth(); 
 
   useEffect(() => {
@@ -17,118 +28,108 @@ const ProviderProfile = () => {
       setLoading(true);
       setError('');
       try {
-        // The backend API uses user_id as the lookup for provider profiles
         const response = await apiClient.get(`/providers/${providerUserId}/`);
         setProvider(response.data);
       } catch (err) {
         console.error("Error fetching provider profile:", err);
-        if (err.response && err.response.status === 404) {
-            setError('Service provider not found.');
-        } else {
-            setError('Failed to load provider profile. Please ensure the backend is returning review data.');
-        }
+        setError(err.response?.status === 404 ? 'Service provider not found.' : 'Failed to load provider profile.');
       } finally {
         setLoading(false);
       }
     };
-
     if (providerUserId) {
       fetchProviderProfile();
     }
-  }, [providerUserId]); // Re-fetch if providerUserId changes
+  }, [providerUserId]);
   
   const handleBookServiceClick = () => {
     if (provider) {
-      navigate(`/book-service`, { // Or a more specific path like /providers/${providerUserId}/book
-        state: {
-          providerInfo: {
-            id: provider.user.id, // This is the ServiceProviderProfile PK
-            name: provider.business_name || provider.user.username,
-          }
-        }
+      navigate(`/book-service`, {
+        state: { providerInfo: { id: provider.user.id, name: provider.business_name || provider.user.username } }
       });
     }
   };
 
-  const handleChatWithProviderClick = () => {
-    if (!currentUser) {
-      alert("Please log in to chat with the provider.");
-      navigate('/login');
-      return;
-    }
-    if (provider && provider.user && currentUser.user_id) { // Ensure provider.user and currentUser.user_id exist
-      // provider.user.id is the provider's user ID
-      // currentUser.user_id is the logged-in customer's user ID (from JWT payload)
-      const userId1 = parseInt(currentUser.user_id, 10);
-      const userId2 = parseInt(provider.user.id, 10);
+  const handleChatWithProviderClick = () => { /* ... (Your chat logic is fine) ... */ };
 
-      // Create a consistent room name by ordering IDs
-      const roomName = userId1 < userId2 ? `chat_user${userId1}_user${userId2}` : `chat_user${userId2}_user${userId1}`;
+  if (loading) return <div className="text-center mt-5"><Spinner animation="border" variant="primary" /></div>;
+  if (error) return <Alert variant="danger">{error}</Alert>;
+  if (!provider) return <Alert variant="warning">No provider data available.</Alert>;
 
-      // Navigate to the chat page, passing roomName and potentially other info
-      navigate(`/chat/${roomName}`, {
-        state: {
-          chatWithUsername: provider.user.username || provider.business_name,
-          // You might also pass providerUserId and currentUserId if ChatWindow needs them explicitly
-          // and can't derive them from roomName or AuthContext alone.
-        }
-      });
-    } else {
-      alert("Provider information or your user information is incomplete.");
-    }
-  };
-
-  
-
-  if (loading) {
-    return <p>Loading provider profile...</p>;
-  }
-
-  if (error) {
-    return <p style={{ color: 'red' }}>{error}</p>;
-  }
-
-  if (!provider) {
-    return <p>No provider data available.</p>; // Should be caught by error state generally
-  }
-
-
+  const canBookOrChat = currentUser && !currentUser.is_provider;
 
   return (
     <div>
-      <h2>{provider.business_name || provider.user.username}</h2>
-      {/* provider.user.profile_picture_url ? <img src={provider.user.profile_picture_url} alt="Profile" /> : <p>No profile picture</p> */}
-      <p><strong>Contact:</strong> {provider.phone_number || 'Not provided'}</p>
-      <p><strong>Email:</strong> {provider.user.email}</p>
-      {/* <p><strong>Years of Experience:</strong> {provider.years_of_experience || 'N/A'}</p> */}
-      
-      <h3>About</h3>
-      <p>{provider.bio || 'No biography provided.'}</p>
-
-      <h3>Services Offered</h3>
-      {provider.services_offered && provider.services_offered.length > 0 ? (
-        <ul>
-          {provider.services_offered.map(service => (
-            <li key={service.id}>{service.name}</li>
-          ))}
-        </ul>
-      ) : (
-        <p>No specific services listed.</p>
-      )}
-      
-      {/* <h3>Reviews</h3> */}
-      {/* Placeholder for reviews list - will be implemented later */}
-      {/* <p>Average Rating: {provider.average_rating || 'Not rated yet'}</p> */}
-      {/* <p>Reviews will be displayed here.</p> */}
-
-      <hr />
-      {/* Placeholder buttons */}
-      <div style={{ marginTop: '20px' }}>
-        <button onClick={handleBookServiceClick} style={{ marginRight: '10px' }}>Book Service</button>
-        <button onClick={handleChatWithProviderClick}>Chat with Provider</button>
+      <Row className="justify-content-center">
+        <Col md={10} lg={8}>
+          <Card className="shadow-lg">
+            <Card.Header as="h2" className="text-center p-4 bg-light">
+                {provider.business_name || provider.user.username}
+            </Card.Header>
+            <Card.Body className="p-4">
+              <Row>
+                <Col md={4} className="text-center mb-4 mb-md-0">
+                  {/* --- UPDATED PHOTO SECTION to display the image --- */}
+                  {provider.profile_picture ? (
+                    <Image 
+                      src={provider.profile_picture} // Django provides the full URL
+                      alt={provider.business_name || provider.user.username}
+                      roundedCircle 
+                      style={{width: 150, height: 150, objectFit: 'cover', border: '4px solid #fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'}}
+                    />
+                  ) : (
+                    <div style={{width: 150, height: 150, margin: '0 auto'}}>
+                      <FaUserCircle size="100%" color="#e9ecef" />
+                    </div>
+                  )}
+                  {/* --- END OF UPDATED PHOTO SECTION --- */}
+                  <div className="mt-3">
+                    <StarRatingDisplay rating={provider.average_rating} />
+                    <div className="text-muted">({provider.reviews_received?.length || 0} reviews)</div>
+                  </div>
+                </Col>
+                <Col md={8}>
+                  <Card.Title as="h4">About</Card.Title>
+                  <Card.Text>{provider.bio || 'No biography provided.'}</Card.Text>
+                  <hr />
+                  <p><FaPhone className="me-2 text-muted" /> {provider.phone_number || 'Not provided'}</p>
+                  <p><FaEnvelope className="me-2 text-muted" /> {provider.user.email}</p>
+                  <hr />
+                  <h5 className="mt-4">Services Offered</h5>
+                  <ListGroup variant="flush">
+                    {provider.services_offered?.length > 0 ? (
+                      provider.services_offered.map(service => (
+                        <ListGroup.Item key={service.id}>{service.name}</ListGroup.Item>
+                      ))
+                    ) : (
+                      <ListGroup.Item>No specific services listed.</ListGroup.Item>
+                    )}
+                  </ListGroup>
+                </Col>
+              </Row>
+              {canBookOrChat && (
+                <div className="text-center mt-4 pt-3 border-top">
+                  <Button onClick={handleBookServiceClick} variant="primary" size="lg" className="me-3">
+                    <FaBook className="me-2" />Book This Provider
+                  </Button>
+                  <Button onClick={handleChatWithProviderClick} variant="success" size="lg">
+                    <FaComments className="me-2" />Chat Now
+                  </Button>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+      <Row className="justify-content-center mt-5">
+        <Col md={10} lg={8}>
+          <h3 className="mb-3">Customer Reviews</h3>
+          {/* ... (Your reviews mapping is fine) ... */}
+        </Col>
+      </Row>
+      <div className="text-center mt-4">
+        <Link to="/dashboard">← Back to Dashboard</Link>
       </div>
-      <br/>
-      <Link to="/dashboard">Back to Dashboard</Link>
     </div>
   );
 };

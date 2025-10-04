@@ -1,20 +1,20 @@
-// src/components/BookingForm.js
+// File: src/components/BookingForm.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import apiClient from '../api/axiosConfig';
+// --- React-Bootstrap Imports ---
+import { Form, Button, Card, Row, Col, Alert, Spinner } from 'react-bootstrap';
 
 const BookingForm = () => {
-  // Get providerUserId from URL if navigating directly, or from location state
   const location = useLocation();
   const navigate = useNavigate();
-  const providerInfo = location.state?.providerInfo; // Passed from ProviderProfile page
+  const providerInfo = location.state?.providerInfo;
 
   const [formData, setFormData] = useState({
     service_description: '',
-    booking_datetime: '', // Format: YYYY-MM-DDTHH:MM
+    booking_datetime: '',
     address_for_service: '',
     customer_notes: '',
-    // service_category_requested: null, // Optional: if you have a dropdown for this
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -22,12 +22,9 @@ const BookingForm = () => {
 
   useEffect(() => {
     if (!providerInfo || !providerInfo.id) {
-      // If providerInfo is not available (e.g., direct navigation or bad state)
-      setError("Provider information is missing. Cannot create booking.");
-      // Optionally, redirect back or show an error message prominently
-      // navigate(-1); // Go back
+      setError("Provider information is missing. Please select a provider from the dashboard.");
     }
-  }, [providerInfo, navigate]);
+  }, [providerInfo]);
 
 
   const handleChange = (e) => {
@@ -46,7 +43,7 @@ const BookingForm = () => {
 
     const payload = {
       ...formData,
-      provider_profile: providerInfo.id, // Send the provider's user ID (which is PK of ServiceProviderProfile)
+      provider_profile: providerInfo.id,
     };
 
     try {
@@ -54,16 +51,15 @@ const BookingForm = () => {
       setSuccess('Booking request submitted successfully! You will be notified once confirmed.');
       setFormData({ service_description: '', booking_datetime: '', address_for_service: '', customer_notes: '' });
       setTimeout(() => {
-        navigate('/my-bookings'); // Navigate to a "My Bookings" page
+        navigate('/my-bookings');
       }, 3000);
     } catch (err) {
       console.error("Booking error:", err.response?.data || err.message);
       let errorMsg = 'Failed to submit booking request.';
       if (err.response && err.response.data) {
-        // Concatenate DRF error messages
         const errors = err.response.data;
         errorMsg = Object.keys(errors)
-          .map(key => `${key}: ${Array.isArray(errors[key]) ? errors[key].join(', ') : errors[key]}`)
+          .map(key => `${key.replace(/_/g, ' ')}: ${Array.isArray(errors[key]) ? errors[key].join(' ') : errors[key]}`)
           .join(' | ');
       }
       setError(errorMsg);
@@ -74,41 +70,52 @@ const BookingForm = () => {
 
   if (!providerInfo) {
       return (
-          <div>
-              <h2>Book Service</h2>
-              <p style={{color: 'red'}}>Error: Provider information not found. Please go back and select a provider.</p>
-              <button onClick={() => navigate(-1)}>Go Back</button>
+        <Alert variant="danger" className="text-center">
+          <Alert.Heading>Error: Provider Not Specified</Alert.Heading>
+          <p>Provider information was not found. Please go back to the dashboard and select a provider to book.</p>
+          <hr />
+          <div className="d-flex justify-content-center">
+            <Button as={Link} to="/dashboard" variant="outline-danger">Go to Dashboard</Button>
           </div>
+        </Alert>
       );
   }
 
   return (
-    <div>
-      <h2>Book Service with {providerInfo.name || 'Provider'}</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {success && <p style={{ color: 'green' }}>{success}</p>}
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="service_description">Service Description:</label><br/>
-          <textarea id="service_description" name="service_description" value={formData.service_description} onChange={handleChange} rows="4" cols="50" required />
-        </div>
-        <div>
-          <label htmlFor="booking_datetime">Preferred Date & Time:</label><br/>
-          <input type="datetime-local" id="booking_datetime" name="booking_datetime" value={formData.booking_datetime} onChange={handleChange} required />
-        </div>
-        <div>
-          <label htmlFor="address_for_service">Address for Service:</label><br/>
-          <input type="text" id="address_for_service" name="address_for_service" value={formData.address_for_service} onChange={handleChange} maxLength="255" required />
-        </div>
-        <div>
-          <label htmlFor="customer_notes">Additional Notes (Optional):</label><br/>
-          <textarea id="customer_notes" name="customer_notes" value={formData.customer_notes} onChange={handleChange} rows="3" cols="50" />
-        </div>
-        <button type="submit" disabled={loading}>
-          {loading ? 'Submitting...' : 'Request Booking'}
-        </button>
-      </form>
-    </div>
+    <Row className="justify-content-center mt-4">
+      <Col md={8} lg={6}>
+        <Card className="p-4 shadow">
+          <Card.Body>
+            <h2 className="text-center mb-4 fw-bold">Book Service with {providerInfo.name}</h2>
+            {error && <Alert variant="danger">{error}</Alert>}
+            {success && <Alert variant="success">{success}</Alert>}
+            <Form onSubmit={handleSubmit}>
+              <Form.Group className="mb-3" controlId="formServiceDescription">
+                <Form.Label>Service Description</Form.Label>
+                <Form.Control as="textarea" rows={4} name="service_description" value={formData.service_description} onChange={handleChange} required disabled={loading || success} />
+              </Form.Group>
+              <Form.Group className="mb-3" controlId="formBookingDatetime">
+                <Form.Label>Preferred Date & Time</Form.Label>
+                <Form.Control type="datetime-local" name="booking_datetime" value={formData.booking_datetime} onChange={handleChange} required disabled={loading || success} />
+              </Form.Group>
+              <Form.Group className="mb-3" controlId="formAddress">
+                <Form.Label>Address for Service</Form.Label>
+                <Form.Control type="text" name="address_for_service" value={formData.address_for_service} onChange={handleChange} required disabled={loading || success} />
+              </Form.Group>
+              <Form.Group className="mb-3" controlId="formCustomerNotes">
+                <Form.Label>Additional Notes (Optional)</Form.Label>
+                <Form.Control as="textarea" rows={3} name="customer_notes" value={formData.customer_notes} onChange={handleChange} disabled={loading || success} />
+              </Form.Group>
+              <div className="d-grid mt-4">
+                <Button variant="primary" type="submit" disabled={loading || success}>
+                  {loading ? <><Spinner as="span" animation="border" size="sm" /> Submitting...</> : 'Request Booking'}
+                </Button>
+              </div>
+            </Form>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
   );
 };
 

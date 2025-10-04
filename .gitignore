@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Django / env
+*.sqlite3
+*.env
+env/
+venv/
+ENV/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# VSCode
+.vscode/
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db

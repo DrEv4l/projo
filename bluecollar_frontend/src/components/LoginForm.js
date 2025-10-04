@@ -1,18 +1,16 @@
-// src/components/LoginForm.js
+// File: src/components/LoginForm.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Import useAuth
+import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/axiosConfig';
+import { Form, Button, Card, Row, Col, Alert } from 'react-bootstrap';
 
-// Adjust this URL based on your Django settings and CORS configuration
 const LoginForm = () => {
-  const [formData, setFormData] = useState({
-    username: '', // Or email, depending on your backend login config
-    password: '',
-  });
+  const [formData, setFormData] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false); // Add loading state
   const navigate = useNavigate();
-  const { login } = useAuth(); // Get the login function from context
+  const { login } = useAuth();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -20,58 +18,69 @@ const LoginForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous errors
+    setError('');
+    setLoading(true);
 
     try {
       const response = await apiClient.post('/token/', {
-        username: formData.username, // Django SimpleJWT default expects 'username'
+        username: formData.username,
         password: formData.password,
       });
-      console.log('Login successful:', response.data);
-      
-
-      // Store tokens in localStorage (or sessionStorage)
-      // For more robust state management, consider Context API or Redux/Zustand later
-      localStorage.setItem('accessToken', response.data.access);
-      localStorage.setItem('refreshToken', response.data.refresh);
-
-      // Use the login function from context
       login(response.data.access, response.data.refresh);
-
-      // Redirect to dashboard
       navigate('/dashboard');
-
     } catch (err) {
-      if (err.response && err.response.data) {
-        console.error('Login error:', err.response.data);
-        // SimpleJWT often returns a 'detail' field for auth errors
-        setError(err.response.data.detail || 'Login failed. Please check your credentials.');
-      } else {
-        console.error('An unexpected error occurred:', err);
-        setError('An unexpected error occurred. Please try again.');
-      }
+      const errorMsg = err.response?.data?.detail || 'Login failed. Please check your credentials.';
+      setError(errorMsg);
+      console.error('Login error:', err.response?.data || err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h2>Login</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="username">Username:</label>
-          {/* If your backend supports login with email, you might change the type to 'email' and name to 'email'
-              and adjust the payload in axios.post accordingly if your DRF settings for SimpleJWT use email field.
-              By default, TokenObtainPairSerializer uses 'username'. */}
-          <input type="text" id="username" name="username" value={formData.username} onChange={handleChange} required />
-        </div>
-        <div>
-          <label htmlFor="password">Password:</label>
-          <input type="password" id="password" name="password" value={formData.password} onChange={handleChange} required />
-        </div>
-        <button type="submit">Login</button>
-      </form>
-    </div>
+    <Row className="justify-content-center mt-5">
+      <Col md={6} lg={4}>
+        <Card className="p-4 shadow">
+          <Card.Body>
+            <h2 className="text-center mb-4 fw-bold">Login</h2>
+            {error && <Alert variant="danger">{error}</Alert>}
+            <Form onSubmit={handleSubmit}>
+              <Form.Group className="mb-3" controlId="formUsername">
+                <Form.Label>Username</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Enter username"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3" controlId="formPassword">
+                <Form.Label>Password</Form.Label>
+                <Form.Control
+                  type="password"
+                  placeholder="Password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                />
+              </Form.Group>
+              
+              <div className="d-grid mt-4">
+                <Button variant="primary" type="submit" disabled={loading}>
+                  {loading ? 'Logging in...' : 'Sign In'}
+                </Button>
+              </div>
+            </Form>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
   );
 };
 

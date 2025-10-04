@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 from django.conf import settings
 
@@ -37,6 +38,7 @@ INSTALLED_APPS = [
     'channels',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'rest_framework.authtoken',
     'corsheaders',
     'django.contrib.admin',
@@ -84,12 +86,9 @@ ASGI_APPLICATION = 'bluecollar_backend.asgi.application' # Point to your project
 # Channel Layers Configuration
 # Option 1: Using Redis (Recommended for development and production)
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)], # Your Redis server address and port
-        },
-    },
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
 }
 
 
@@ -141,6 +140,7 @@ USE_TZ = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000", # Your React app's development server
     "http://127.0.0.1:3000",
+    "http://192.168.1.107:3000",
 ]
 
 

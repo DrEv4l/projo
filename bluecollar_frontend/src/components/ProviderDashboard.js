@@ -1,52 +1,87 @@
-// src/components/ProviderDashboard.js (NEW FILE)
+// File: src/components/ProviderDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../api/axiosConfig';
 import { useAuth } from '../context/AuthContext';
+import { Card, Row, Col, Spinner, Alert } from 'react-bootstrap';
 
 const ProviderDashboard = () => {
     const { user } = useAuth();
-    const [summary, setSummary] = useState({ pendingBookings: 0, activeBookings: 0 });
+    const [summary, setSummary] = useState({ pendingBookings: 0, activeBookings: 0, completedBookings: 0 });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        // Fetch a summary for the provider, e.g., number of pending/active bookings
-        // This would require a new API endpoint or derive from the full bookings list
-        const fetchSummary = async () => {
+        const fetchBookingSummary = async () => {
             setLoading(true);
+            setError('');
             try {
-                // Example: fetch all bookings and count them
-                // In a real app, you might have a dedicated summary endpoint
-                const response = await apiClient.get('/bookings/'); // Fetches bookings for this provider
+                const response = await apiClient.get('/bookings/');
                 const bookings = response.data.results || response.data;
                 const pending = bookings.filter(b => b.status === 'PENDING').length;
                 const active = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS').length;
-                setSummary({ pendingBookings: pending, activeBookings: active });
-            } catch (error) {
-                console.error("Error fetching provider dashboard summary:", error);
+                const completed = bookings.filter(b => b.status === 'COMPLETED').length;
+                setSummary({ pendingBookings: pending, activeBookings: active, completedBookings: completed });
+            } catch (err) {
+                console.error("Error fetching provider dashboard summary:", err);
+                setError("Could not load your dashboard summary.");
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
-        if(user && user.is_provider) {
-            fetchSummary();
+
+        if (user && user.is_provider) {
+            fetchBookingSummary();
         }
     }, [user]);
 
-    if (loading) return <p>Loading provider dashboard...</p>;
+    if (loading) return <div className="text-center"><Spinner animation="border" /></div>;
+    if (error) return <Alert variant="danger">{error}</Alert>;
 
     return (
         <div>
-            <h2>Welcome, Provider {user?.username}!</h2>
-            <p>This is your Provider Dashboard.</p>
-            <Link to="/my-bookings">Manage Your Bookings</Link>
-            <hr />
-            <div>
-                <h3>Booking Summary</h3>
-                <p>Pending Bookings: {summary.pendingBookings}</p>
-                <p>Active Bookings: {summary.activeBookings}</p>
+            <h2 className="mb-4">Provider Dashboard</h2>
+            <p className="lead">Welcome back, <strong>{user?.username}!</strong></p>
+            
+            <Row className="my-4 text-center">
+                <Col md={4}>
+                    <Card className="shadow-sm">
+                        <Card.Body>
+                            <Card.Title as="h1" className="fw-bold text-info">{summary.pendingBookings}</Card.Title>
+                            <Card.Text>Pending Bookings</Card.Text>
+                        </Card.Body>
+                    </Card>
+                </Col>
+                <Col md={4}>
+                    <Card className="shadow-sm">
+                        <Card.Body>
+                            <Card.Title as="h1" className="fw-bold text-primary">{summary.activeBookings}</Card.Title>
+                            <Card.Text>Active Bookings</Card.Text>
+                        </Card.Body>
+                    </Card>
+                </Col>
+                <Col md={4}>
+                    <Card className="shadow-sm">
+                        <Card.Body>
+                            <Card.Title as="h1" className="fw-bold text-success">{summary.completedBookings}</Card.Title>
+                            <Card.Text>Completed Jobs</Card.Text>
+                        </Card.Body>
+                    </Card>
+                </Col>
+            </Row>
+
+            <div className="mt-4 d-flex justify-content-center gap-3">
+                <Link to="/my-bookings" className="btn btn-primary btn-lg">
+                    Manage All Bookings
+                </Link>
+                
+                {/* === CORRECTED LINK to provider-specific edit page === */}
+                <Link to="/profile/provider/edit" className="btn btn-outline-secondary btn-lg">
+                    Edit Provider Profile
+                </Link>
             </div>
-            {/* Add links to manage profile, services, etc. later */}
         </div>
     );
 };
+
 export default ProviderDashboard;

@@ -1,104 +1,142 @@
-// src/components/CustomerDashboard.js (NEW FILE)
-import React, { useState, useEffect } from 'react';
+// File: src/components/CustomerDashboard.js
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../api/axiosConfig';
+import { useAuth } from '../context/AuthContext';
+import { Card, Button, Row, Col, Spinner, Alert, Form, InputGroup } from 'react-bootstrap';
+import { FaSearch, FaWrench, FaBolt, FaPaintBrush, FaBroom, FaPlus } from 'react-icons/fa';
+
+const categoryIcons = {
+  default: <FaPlus className="me-2" />,
+  Plumbing: <FaWrench className="me-2" />,
+  Electrical: <FaBolt className="me-2" />,
+  Painting: <FaPaintBrush className="me-2" />,
+  Cleaning: <FaBroom className="me-2" />,
+};
 
 const CustomerDashboard = () => {
   const [categories, setCategories] = useState([]);
   const [providers, setProviders] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { user } = useAuth();
 
-  // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
-      setLoadingCategories(true);
       try {
         const response = await apiClient.get('/categories/');
         setCategories(response.data.results || response.data);
       } catch (err) {
         console.error("Error fetching categories:", err);
-        setError('Could not load service categories.');
       }
-      setLoadingCategories(false);
     };
     fetchCategories();
   }, []);
 
-  // Fetch providers when a category is selected or initially
+  const fetchProviders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (selectedCategoryId) {
+      params.append('category', selectedCategoryId);
+    }
+    if (searchTerm) {
+      params.append('search', searchTerm);
+    }
+    try {
+      const response = await apiClient.get(`/providers/?${params.toString()}`);
+      setProviders(response.data.results || response.data);
+    } catch (err) {
+      console.error("Error fetching providers:", err);
+      setError('Could not load service providers.');
+      setProviders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCategoryId, searchTerm]);
+
   useEffect(() => {
-    const fetchProviders = async () => {
-      if (!selectedCategoryId && categories.length > 0) { // Default to first category or all providers
-        // For now, let's not select a category by default unless explicitly done
-        // setSelectedCategoryId(categories[0].id);
-        // return;
-      }
+    const timerId = setTimeout(() => {
+      fetchProviders();
+    }, 300);
+    return () => clearTimeout(timerId);
+  }, [fetchProviders]);
 
-      setLoadingProviders(true);
-      setError('');
-      let url = '/providers/';
-      if (selectedCategoryId) {
-        url += `?category=${selectedCategoryId}`;
-      }
-
-      try {
-        const response = await apiClient.get(url);
-        setProviders(response.data.results || response.data);
-      } catch (err) {
-        console.error("Error fetching providers:", err);
-        // This is where your Dashboard.js:56 error was happening
-        setError('Could not load service providers.');
-        setProviders([]); // Clear providers on error
-      }
-      setLoadingProviders(false);
-    };
-
-    // Fetch providers if categories are loaded or if a category is selected
-    // To avoid fetching providers without categories, you might want to trigger this
-    // more explicitly, e.g., after categories load or when a user selects one.
-    // For now, let's fetch all initially, then filter.
-    fetchProviders();
-  }, [selectedCategoryId, categories]); // Refetch if selectedCategoryId or categories list changes
-
-  if (loadingCategories) return <p>Loading dashboard...</p>;
-  if (error) return <p style={{color: 'red'}}>{error}</p>;
+  if (error && !loading) return <Alert variant="danger">{error}</Alert>;
+  
+  const selectedCategoryName = selectedCategoryId ? categories.find(c => c.id === selectedCategoryId)?.name : '';
 
   return (
     <div>
-      <h2>Welcome, Customer! Find a Service</h2>
+      <h2 className="mb-3">Welcome, {user?.username}! Find a Service</h2>
       <Link to="/my-bookings">View My Bookings</Link>
-      <hr />
+      <hr className="my-4" />
 
-      <h3>Service Categories</h3>
-      {categories.length === 0 && <p>No service categories available at the moment.</p>}
-      <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexWrap: 'wrap' }}>
-        {categories.map(category => (
-          <li key={category.id} style={{ margin: '5px' }}>
-            <button onClick={() => setSelectedCategoryId(category.id)}>
-              {category.name}
-            </button>
-          </li>
-        ))}
-        {selectedCategoryId && <button onClick={() => {setSelectedCategoryId(null); setProviders([]); /* Optionally refetch all providers */}}>Show All Providers</button>}
-      </ul>
-      <hr />
-
-      <h3>Service Providers {selectedCategoryId ? `(in ${categories.find(c=>c.id === selectedCategoryId)?.name || ''})` : '(All)'}</h3>
-      {loadingProviders && <p>Loading providers...</p>}
-      {!loadingProviders && providers.length === 0 && <p>No providers found {selectedCategoryId ? 'for this category' : 'yet'}.</p>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-        {providers.map(provider => (
-          <div key={provider.user.id} style={{ border: '1px solid #eee', padding: '15px', width: '300px', borderRadius: '5px' }}>
-            <h4>{provider.business_name || provider.user.username}</h4>
-            <p>{provider.bio?.substring(0, 100)}...</p>
-            <p>Services: {provider.services_offered?.join(', ') || 'N/A'}</p>
-            <Link to={`/providers/${provider.user.id}`}>View Profile & Book</Link>
-          </div>
-        ))}
-      </div>
+      <Card className="p-3 mb-4 shadow-sm">
+        <Row className="g-3 align-items-center">
+          <Col lg={7} className="border-lg-end">
+            <h5 className="mb-2">Filter by Category</h5>
+            <div className="d-flex flex-wrap gap-2">
+              {categories.map(category => (
+                <Button key={category.id} variant={selectedCategoryId === category.id ? 'primary' : 'outline-primary'}
+                        onClick={() => setSelectedCategoryId(category.id)} size="sm">
+                  {categoryIcons[category.name] || categoryIcons.default} {category.name}
+                </Button>
+              ))}
+              {selectedCategoryId && (
+                <Button variant="outline-secondary" size="sm" onClick={() => setSelectedCategoryId(null)}>
+                  Clear Filter
+                </Button>
+              )}
+            </div>
+          </Col>
+          <Col lg={5}>
+            <h5 className="mb-2">Search by Keyword</h5>
+            <Form onSubmit={(e) => e.preventDefault()}>
+              <InputGroup>
+                <Form.Control type="text" placeholder="e.g., 'plumber', business name..."
+                              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Button variant="outline-secondary"><FaSearch /></Button>
+              </InputGroup>
+            </Form>
+          </Col>
+        </Row>
+      </Card>
+      
+      <h4>{loading ? 'Searching...' : `Showing ${providers.length} Providers ${selectedCategoryName ? `for ${selectedCategoryName}` : ''}`}</h4>
+      
+      {loading ? (
+        <div className="text-center mt-4"><Spinner animation="border" /></div>
+      ) : (
+        <Row xs={1} md={2} lg={3} className="g-4 mt-2">
+          {providers.length > 0 ? (
+            providers.map(provider => (
+              <Col key={provider.user.id}>
+                <Card className="h-100 shadow-sm custom-card-hover">
+                  <Card.Body className="d-flex flex-column">
+                    <Card.Title as="h5" className="fw-bold">{provider.business_name || provider.user.username}</Card.Title>
+                    {provider.average_rating != null && (
+                      <Card.Subtitle className="mb-2 text-muted">Rating: {provider.average_rating.toFixed(1)} ★</Card.Subtitle>
+                    )}
+                    <Card.Text className="text-muted flex-grow-1">
+                      {provider.bio ? `${provider.bio.substring(0, 90)}...` : 'No bio available.'}
+                    </Card.Text>
+                    <Button as={Link} to={`/providers/${provider.user.id}`} variant="primary" className="mt-auto">
+                      View Profile & Book
+                    </Button>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))
+          ) : (
+            <Col><Alert variant="info">No providers match your search criteria.</Alert></Col>
+          )}
+        </Row>
+      )}
     </div>
   );
 };
+
 export default CustomerDashboard;

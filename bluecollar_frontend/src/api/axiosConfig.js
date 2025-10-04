@@ -1,47 +1,47 @@
 // File: src/api/axiosConfig.js
 import axios from 'axios';
-// You'll need a way to call logout from your AuthContext if refresh fails.
-// This is tricky directly from here. One way is to dispatch a custom event.
-// Or, your AuthContext could also attempt refresh periodically or on app load if token is near expiry.
 
+// Get the base API URL from environment variables, with a fallback for local development
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
+
+// Helper functions to get tokens from localStorage
 const getAccessToken = () => localStorage.getItem('accessToken');
-const getRefreshToken = () => localStorage.getItem('refreshToken'); // Function to get refresh token
+const getRefreshToken = () => localStorage.getItem('refreshToken');
 
 const apiClient = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request Interceptor (should be fine as is)
+// --- Request Interceptor ---
+// This runs BEFORE each request is sent.
 apiClient.interceptors.request.use(
   (config) => {
-    const publicPaths = ['/token/', '/token/refresh/']; // Note: /users/register/ removed as it might sometimes be protected by other means or not exist as an API endpoint
-    // If /users/register/ is truly public and shouldn't have a token, keep it.
-    // But often, registration doesn't need token exclusion if it's a public POST.
-    // The main concern is not sending an *expired* token.
+    // List of public URLs that don't need an auth token.
+    const publicPaths = ['/token/', '/token/refresh/', '/users/register/', '/users/register/provider/'];
 
-    // Let's adjust to only add token if it exists and path is not for initial token obtain/refresh
-    if (!publicPaths.some(path => config.url.endsWith(path))) {
+    // Check if the request URL is one of the public paths.
+    // config.url will be relative to the baseURL (e.g., '/token/').
+    if (!publicPaths.includes(config.url)) {
       const token = getAccessToken();
       if (token) {
         config.headers['Authorization'] = `Bearer ${token}`;
-        // console.log('Interceptor: Token added for URL:', config.url);
-      } else {
-        // console.log('Interceptor: No token found in localStorage for URL:', config.url);
       }
-    } else {
-      // console.log('Interceptor: Public path (token/refresh), token not added for URL:', config.url);
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// === RESPONSE INTERCEPTOR - TOKEN REFRESH LOGIC ===
-let isRefreshing = false; // Flag to prevent multiple refresh attempts
-let failedQueue = []; // Queue of requests that failed with 401
+// --- Response Interceptor ---
+// This runs AFTER a response is received, and is mainly for handling token refresh.
+
+// A flag to prevent multiple token refresh requests from firing at the same time.
+let isRefreshing = false;
+// A queue to hold requests that failed due to an expired token, to be retried later.
+let failedQueue = [];
 
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
@@ -55,79 +55,84 @@ const processQueue = (error, token = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => { // Any status code that lie within the range of 2xx cause this function to trigger
+  (response) => {
+    // If the request was successful, just return the response.
     return response;
   },
-  async (error) => { // Any status codes that falls outside the range of 2xx cause this function to trigger
+  async (error) => {
     const originalRequest = error.config;
 
-    // Check if it's a 401 error and not a retry request, and not the refresh token request itself
-    if (error.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/token/refresh/') {
+    // Check for the specific condition: a 401 Unauthorized error,
+    // which is not for the refresh token endpoint itself, and not a request that has already been retried.
+    if (error.response?.status === 401 && originalRequest.url !== '/token/refresh/' && !originalRequest._retry) {
       if (isRefreshing) {
-        // If already refreshing, add this request to a queue to be retried later
+        // If a refresh is already in progress, add this failed request to the queue.
         return new Promise(function(resolve, reject) {
           failedQueue.push({resolve, reject});
         }).then(token => {
           originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return apiClient(originalRequest); // Retry with new token
-        }).catch(err => {
-          return Promise.reject(err);
+          return apiClient(originalRequest); // Retry the request with the new token
         });
       }
 
-      originalRequest._retry = true; // Mark this request as retried
-      isRefreshing = true; // Set refreshing flag
+      originalRequest._retry = true; // Mark this request so we don't try to refresh it again.
+      isRefreshing = true;
 
       const refreshToken = getRefreshToken();
       if (refreshToken) {
         try {
-          console.log('Attempting to refresh token...');
-          // Use a new axios instance or global axios for refresh request
-          // to avoid circular interceptor calls if apiClient itself is used
-          const rs = await axios.post('http://127.0.0.1:8000/api/token/refresh/', {
+          console.log('Interceptor: Access token expired. Attempting to refresh...');
+          // Use a new, clean axios instance for the refresh request to avoid circular interceptor logic.
+          const rs = await axios.post(`${API_URL}/token/refresh/`, {
             refresh: refreshToken,
           });
 
-          const { access } = rs.data;
-          localStorage.setItem('accessToken', access); // Update stored access token
+          const { access: newAccessToken } = rs.data;
+          
+          // IMPORTANT: Update localStorage first.
+          localStorage.setItem('accessToken', newAccessToken);
 
-          // Update the default Authorization header for subsequent apiClient requests
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${access}`;
+          // Update the default header for all future apiClient requests
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
           // Update the header of the original failed request
-          originalRequest.headers['Authorization'] = `Bearer ${access}`;
+          originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+          
+          // Process any queued requests with the new token
+          processQueue(null, newAccessToken);
+          
+          console.log('Interceptor: Token refreshed successfully. Retrying original request.');
+          return apiClient(originalRequest); // Retry the original request
 
-          processQueue(null, access); // Process queued requests with new token
-          isRefreshing = false;
-          console.log('Token refreshed successfully. Retrying original request.');
-          return apiClient(originalRequest); // Retry the original request with the new token
         } catch (_error) {
-          processQueue(_error, null); // Reject queued requests
-          isRefreshing = false;
-          console.error('Token refresh failed:', _error.response?.data || _error.message);
-          // CRITICAL: Dispatch logout action or redirect to login
-          // This is where you'd ideally call your AuthContext's logout function.
-          // Since we can't directly call context hooks here, we might:
-          // 1. Dispatch a custom event that AuthProvider listens to.
-          // 2. Redirect directly (less ideal as context state might not update immediately).
+          console.error('Interceptor: Token refresh failed.', _error.response?.data || _error.message);
+          // If refresh fails, reject all queued requests and log the user out.
+          processQueue(_error, null);
+
+          // --- LOGOUT LOGIC ---
+          // This part is crucial for security.
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
-          // window.location.href = '/login'; // Forces a full page reload and context reset
-          console.log("User should be logged out or redirected to login.");
+          
+          // Dispatch a custom event that the AuthProvider can listen for to update its state.
+          // This is a clean way to communicate from a non-React file to your React context.
+          window.dispatchEvent(new CustomEvent('logout-event'));
+          // --------------------
+
           return Promise.reject(_error);
+        } finally {
+          isRefreshing = false;
         }
       } else {
-        console.log("No refresh token available. Cannot refresh.");
-        isRefreshing = false; // Reset flag even if no refresh token
-        // Dispatch logout or redirect
-        localStorage.removeItem('accessToken');
-        // window.location.href = '/login';
-        return Promise.reject(error); // Reject the original error
+        console.log("Interceptor: No refresh token available. User needs to log in again.");
+        isRefreshing = false;
+        // If there's no refresh token, there's nothing we can do. The user is logged out.
+        window.dispatchEvent(new CustomEvent('logout-event'));
       }
     }
-    isRefreshing = false; // Ensure flag is reset for non-401 errors or already retried requests
+
+    // For any other errors, just pass them along.
     return Promise.reject(error);
   }
 );
-// === END OF RESPONSE INTERCEPTOR ===
 
 export default apiClient;
